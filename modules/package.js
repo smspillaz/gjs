@@ -255,6 +255,18 @@ function _launcherUsage(flags) {
     print('Options:');
     print('  -h, --help   Show this help message');
     print('  --version    Show the application version');
+    print('  -g, --debug  Run the application in a debugger');
+}
+
+function _spawnGDB(args, debugIndex) {
+    args.splice(debugIndex, 1);
+
+    try {
+        System.exec(['gdb', '--args', 'gjs', System.programInvocationName].concat(args));
+    } catch(e) {
+        print('Failed to launch debugger: ' + e.message);
+        System.exit(1);
+    }
 }
 
 function _parseLaunchArgs(args, params) {
@@ -276,6 +288,11 @@ function _parseLaunchArgs(args, params) {
 	    print(params.name + ' ' + params.version);
 	    System.exit(0);
 	    break;
+
+        case '--debug':
+        case '-g':
+            _spawnGDB(args, i);
+            break;
 
 	default:
 	    newArgs.push(args[i]);
