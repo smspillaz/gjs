@@ -116,6 +116,7 @@ main(int argc, char **argv)
                                          argc - 1, (const char**)argv + 1,
                                          &error)) {
         g_printerr("Failed to defined ARGV: %s", error->message);
+        g_object_unref(js_context);
         exit(1);
     }
 
@@ -125,8 +126,11 @@ main(int argc, char **argv)
                           filename, &code, &error)) {
         g_free(script);
         g_printerr("%s\n", error->message);
+        g_object_unref(js_context);
         exit(1);
     }
+    
+    g_object_unref(js_context);
 
     g_free(script);
     exit(code);
