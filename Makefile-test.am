@@ -26,6 +26,7 @@ gjs_tests_SOURCES =		\
 	test/gjs-test-reflected-executable-script.cpp \
 	test/gjs-test-debug-connection.cpp \
 	test/gjs-test-debug-hooks.cpp \
+	test/gjs-test-coverage.cpp \
 	test/gjs-tests-add-funcs.h
 
 check-local: gjs-tests

@@ -120,6 +120,8 @@ libgjs_la_SOURCES =		\
 	gjs/debug-hooks-private.h \
 	gjs/multiplexed-debug-hooks.cpp \
 	gjs/multiplexed-debug-hooks.h \
+	gjs/coverage.cpp \
+	gjs/coverage.h \
 	gjs/jsapi-private.cpp	\
 	gjs/jsapi-util.cpp	\
 	gjs/jsapi-dynamic-class.cpp \
@@ -208,10 +210,10 @@ bin_PROGRAMS += gjs-console
 
 gjs_console_CPPFLAGS = 		\
 	$(AM_CPPFLAGS)		\
-        $(GOBJECT_CFLAGS)
+        $(GJS_CONSOLE_CFLAGS)
 gjs_console_LDADD =		\
-	$(JS_LIBS)		\
-	$(GOBJECT_LIBS)		\
+        $(JS_LIBS)		\
+        $(GJS_CONSOLE_LIBS)	\
 	libgjs.la
 gjs_console_LDFLAGS = -rdynamic
 gjs_console_SOURCES = gjs/console.cpp

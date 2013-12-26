@@ -26,14 +26,24 @@
 #include <stdlib.h>
 #include <locale.h>
 
+#include <gio/gio.h>
+
 #include <gjs/gjs.h>
+#include <gjs/coverage.h>
+#include <gjs/debug-hooks.h>
 
 static char **include_path = NULL;
+static char **coverage_paths = NULL;
+static char *coverage_output_path = NULL;
+static gboolean accumulate_coverage_data = FALSE;
 static char *command = NULL;
 static char *js_version= NULL;
 
 static GOptionEntry entries[] = {
     { "command", 'c', 0, G_OPTION_ARG_STRING, &command, "Program passed in as a string", "COMMAND" },
+    { "coverage-path", 'C', 0, G_OPTION_ARG_STRING_ARRAY, &coverage_paths, "Add the directory DIR to the list of directories to generate coverage info for", "DIR" },
+    { "coverage-output", 0, 0, G_OPTION_ARG_STRING, &coverage_output_path, "Write coverage output to a single FILE", "FILE", },
+    { "accumulate-coverage", 0, 0, G_OPTION_ARG_NONE, &accumulate_coverage_data, "Append coverage data if FILE was already found", "FILE" },
     { "include-path", 'I', 0, G_OPTION_ARG_STRING_ARRAY, &include_path, "Add the directory DIR to the list of directories to search for js files.", "DIR" },
     { "js-version", 0, 0, G_OPTION_ARG_STRING, &js_version, "JavaScript version (e.g. \"default\", \"1.8\"", "JSVERSION" },
     { NULL }
@@ -53,6 +63,28 @@ print_help (GOptionContext *context,
   exit (0);
 }
 
+static GValue *
+init_array_parameter(GArray      *array,
+                     guint       index,
+                     const gchar *name,
+                     GType       type)
+{
+    if (index >= array->len)
+        g_array_set_size(array, index + 1);
+
+    GParameter *param = &(g_array_index(array, GParameter, index));
+    param->name = name;
+    g_value_init(&param->value, type);
+    return &param->value;
+}
+
+static void
+clear_array_parameter_value(gpointer value)
+{
+    GParameter *parameter = (GParameter *) value;
+    g_value_unset(&parameter->value);
+}
+
 int
 main(int argc, char **argv)
 {
@@ -60,6 +92,7 @@ main(int argc, char **argv)
     GOptionContext *context;
     GError *error = NULL;
     GjsContext *js_context;
+    GjsCoverage *coverage = NULL;
     char *script;
     const char *filename;
     const char *program_name;
@@ -119,6 +152,7 @@ main(int argc, char **argv)
     /* If user explicitly specifies a version, use it */
     if (js_version != NULL)
         source_js_version = js_version;
+
     if (source_js_version != NULL)
         js_context = (GjsContext*) g_object_new(GJS_TYPE_CONTEXT,
                                   "search-path", include_path,
@@ -130,6 +164,10 @@ main(int argc, char **argv)
                                   "search-path", include_path,
                                   "program-name", program_name,
                                   NULL);
+    if (coverage_paths)
+        coverage = gjs_coverage_new(GJS_DEBUG_HOOKS_INTERFACE(js_context),
+                                    js_context,
+                                    (const gchar **) coverage_paths);
 
     /* prepare command line arguments */
     if (!gjs_context_define_string_array(js_context, "ARGV",
@@ -146,6 +184,30 @@ main(int argc, char **argv)
         g_free(script);
         g_printerr("%s\n", error->message);
         exit(1);
+    }
+
+    if (coverage) {
+        /* Make sure to dump the results of any coverage analysis before
+         * getting rid of the coverage object */
+        GFile *coverage_output_file = NULL;
+
+        /* If js_context->coverage_output_path it means that we should output
+         * to $(file).js.info instead of redirecting to a single file.
+         *
+         * gjs_debug_coverage_write_statistics will detect coverage_output_file
+         * being NULL and do this automatically */
+        if (coverage_output_path)
+            coverage_output_file =
+                g_file_new_for_path(coverage_output_path);
+
+        gjs_coverage_write_statistics(coverage,
+                                      coverage_output_file,
+                                      accumulate_coverage_data);
+
+        if (coverage_output_file)
+            g_object_unref(coverage_output_file);
+
+        g_clear_object(&coverage);
     }
     
     g_object_unref(js_context);

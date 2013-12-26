@@ -22,6 +22,7 @@
 
 void gjs_test_add_tests_for_reflected_executable_script ();
 void gjs_test_add_tests_for_debug_hooks ();
+void gjs_test_add_tests_for_coverage ();
 void gjs_test_add_tests_for_debug_connection ();
 
 #endif
