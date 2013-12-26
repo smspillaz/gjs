@@ -112,6 +112,14 @@ libgjs_la_SOURCES =		\
 	gjs/reflected-script.cpp \
 	gjs/reflected-script.h \
 	gjs/reflected-script-private.h \
+	gjs/debug-connection.cpp \
+	gjs/debug-connection.h \
+	gjs/debug-connection-private.h \
+	gjs/debug-hooks.cpp \
+	gjs/debug-hooks.h \
+	gjs/debug-hooks-private.h \
+	gjs/multiplexed-debug-hooks.cpp \
+	gjs/multiplexed-debug-hooks.h \
 	gjs/jsapi-private.cpp	\
 	gjs/jsapi-util.cpp	\
 	gjs/jsapi-dynamic-class.cpp \

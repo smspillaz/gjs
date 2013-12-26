@@ -24,6 +24,9 @@
 #include <config.h>
 
 #include "context.h"
+#include "debug-connection.h"
+#include "debug-hooks.h"
+#include "multiplexed-debug-hooks.h"
 #include "importer.h"
 #include "jsapi-util.h"
 #include "profiler.h"
@@ -68,6 +71,7 @@ struct _GjsContext {
     JSContext *context;
     JSObject *global;
 
+    GjsDebugHooks *hooks;
     GjsProfiler *profiler;
 
     char *jsversion_string;
@@ -84,7 +88,14 @@ struct _GjsContextClass {
     GObjectClass parent;
 };
 
-G_DEFINE_TYPE(GjsContext, gjs_context, G_TYPE_OBJECT);
+static void
+gjs_context_debug_hooks_interface_init (GjsDebugHooksInterface *interface);
+
+G_DEFINE_TYPE_WITH_CODE(GjsContext,
+                        gjs_context,
+                        G_TYPE_OBJECT,
+                        G_IMPLEMENT_INTERFACE(GJS_TYPE_DEBUG_HOOKS_INTERFACE,
+                                              gjs_context_debug_hooks_interface_init))
 
 enum {
     SIGNAL_GC,
@@ -278,6 +289,54 @@ gjs_printerr(JSContext *context,
     return JS_TRUE;
 }
 
+GjsDebugConnection *
+gjs_context_add_breakpoint(GjsDebugHooks        *hooks,
+                           const gchar          *filename,
+                           guint                 line,
+                           GjsInterruptCallback  callback,
+                           gpointer              user_data)
+{
+    GjsContext *context = GJS_CONTEXT(hooks);
+    return gjs_debug_hooks_add_breakpoint(context->hooks, filename, line, callback, user_data);
+}
+
+GjsDebugConnection *
+gjs_context_start_singlestep(GjsDebugHooks        *hooks,
+                             GjsInterruptCallback  callback,
+                             gpointer              user_data)
+{
+    GjsContext *context = GJS_CONTEXT(hooks);
+    return gjs_debug_hooks_start_singlestep(context->hooks, callback, user_data);
+}
+
+GjsDebugConnection *
+gjs_context_connect_to_script_load(GjsDebugHooks   *hooks,
+                                   GjsInfoCallback  callback,
+                                   gpointer         user_data)
+{
+    GjsContext *context = GJS_CONTEXT(hooks);
+    return gjs_debug_hooks_connect_to_script_load(context->hooks, callback, user_data);
+}
+
+GjsDebugConnection *
+gjs_context_connect_to_function_calls_and_execution(GjsDebugHooks    *hooks,
+                                                    GjsFrameCallback  callback,
+                                                    gpointer          user_data)
+{
+    GjsContext *context = GJS_CONTEXT(hooks);
+    return gjs_debug_hooks_connect_to_function_calls_and_execution(context->hooks, callback, user_data);
+}
+
+
+static void
+gjs_context_debug_hooks_interface_init (GjsDebugHooksInterface *interface)
+{
+    interface->add_breakpoint = gjs_context_add_breakpoint;
+    interface->start_singlestep = gjs_context_start_singlestep;
+    interface->connect_to_script_load = gjs_context_connect_to_script_load;
+    interface->connect_to_function_calls_and_execution = gjs_context_connect_to_function_calls_and_execution;
+}
+
 static void
 gjs_context_init(GjsContext *js_context)
 {
@@ -370,6 +429,8 @@ gjs_context_dispose(GObject *object)
         gjs_profiler_free(js_context->profiler);
         js_context->profiler = NULL;
     }
+    
+    g_clear_object(&js_context->hooks);
 
     if (js_context->global != NULL) {
         js_context->global = NULL;
@@ -668,6 +729,7 @@ gjs_context_constructor (GType                  type,
         g_error("Failed to point 'imports' property at root importer");
 
     js_context->profiler = gjs_profiler_new(js_context->runtime);
+    js_context->hooks = GJS_DEBUG_HOOKS_INTERFACE(gjs_multiplexed_debug_hooks_new(js_context));
 
     JS_SetGCCallback(js_context->runtime, gjs_on_context_gc);
 

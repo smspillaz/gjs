@@ -524,8 +524,8 @@ unref_array_if_nonnull(GArray *array)
 static void
 gjs_reflected_executable_script_finalize (GObject *object)
 {
-    GjsReflectedExecutableScript *reg = GJS_REFLECTED_EXECUTABLE_SCRIPT(object);
-    GjsReflectedExecutableScriptPrivate *priv = (GjsReflectedExecutableScriptPrivate *) gjs_reflected_executable_script_get_instance_private(reg);
+    GjsReflectedExecutableScript *hooks = GJS_REFLECTED_EXECUTABLE_SCRIPT(object);
+    GjsReflectedExecutableScriptPrivate *priv = (GjsReflectedExecutableScriptPrivate *) gjs_reflected_executable_script_get_instance_private(hooks);
 
     unref_array_if_nonnull(priv->all_branches);
     unref_array_if_nonnull(priv->all_function_names);

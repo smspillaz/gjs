@@ -15,13 +15,36 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
  *
- * Authored By: Sam Spilsbury <sam@endlessm.com>
+ * Authored By: Sam Spilsbury <sam.spilsbury@canonical.com>
  */
-#ifndef GJS_TESTS_ADD_FUNCS_H
-#define GJS_TESTS_ADD_FUNCS_H
+#ifndef GJS_INTERRUPT_REGISTER_PRIVATE_H
+#define GJS_INTERRUPT_REGISTER_PRIVATE_H
 
-void gjs_test_add_tests_for_reflected_executable_script ();
-void gjs_test_add_tests_for_debug_hooks ();
-void gjs_test_add_tests_for_debug_connection ();
+#include <glib.h>
+
+G_BEGIN_DECLS
+
+typedef struct _GjsInterruptInfo GjsInterruptInfo;
+typedef struct _GjsReflectedScript GjsReflectedScript;
+typedef enum _GjsFrameState GjsFrameState;
+
+struct _GjsInterruptInfo {
+    char         *filename;
+    unsigned int line;
+    char         *function_name;
+};
+
+struct _GjsFrameInfo {
+    GjsInterruptInfo interrupt;
+    GjsFrameState    frame_state;
+};
+
+struct _GjsDebugScriptInfo {
+    const char         *filename;
+    GjsReflectedScript *reflected_script;
+    unsigned int       begin_line;
+};
+
+G_END_DECLS
 
 #endif

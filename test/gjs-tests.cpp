@@ -318,6 +318,9 @@ main(int    argc,
     g_test_add_func("/gjs/stack/dump", gjstest_test_func_gjs_stack_dump);
     g_test_add_func("/util/glib/strv/concat/null", gjstest_test_func_util_glib_strv_concat_null);
     g_test_add_func("/util/glib/strv/concat/pointers", gjstest_test_func_util_glib_strv_concat_pointers);
+    
+    gjs_test_add_tests_for_debug_connection ();
+    gjs_test_add_tests_for_debug_hooks ();
 
     gjs_test_add_tests_for_reflected_executable_script();
 

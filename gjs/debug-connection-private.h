@@ -17,11 +17,19 @@
  *
  * Authored By: Sam Spilsbury <sam@endlessm.com>
  */
-#ifndef GJS_TESTS_ADD_FUNCS_H
-#define GJS_TESTS_ADD_FUNCS_H
+#ifndef GJS_DEBUG_CONNECTION_PRIVATE_H
+#define GJS_DEBUG_CONNECTION_PRIVATE_H
 
-void gjs_test_add_tests_for_reflected_executable_script ();
-void gjs_test_add_tests_for_debug_hooks ();
-void gjs_test_add_tests_for_debug_connection ();
+#include <gjs/debug-connection.h>
+
+G_BEGIN_DECLS
+
+typedef void (*GjsDebugConnectionDisposeCallback)(GjsDebugConnection *connection,
+                                                  gpointer            user_data);
+
+GjsDebugConnection * gjs_debug_connection_new(GjsDebugConnectionDisposeCallback callback,
+                                              gpointer                          user_data);
+
+G_END_DECLS
 
 #endif
