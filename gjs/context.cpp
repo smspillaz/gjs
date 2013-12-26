@@ -26,6 +26,7 @@
 #include <gio/gio.h>
 
 #include "context.h"
+#include "debug-hooks.h"
 #include "importer.h"
 #include "jsapi-util.h"
 #include "profiler.h"
@@ -66,6 +67,7 @@ struct _GjsContext {
     JSContext *context;
     JSObject *global;
 
+    GjsDebugHooks *hooks;
     GjsProfiler *profiler;
 
     char *program_name;
@@ -355,6 +357,8 @@ gjs_context_dispose(GObject *object)
         gjs_profiler_free(js_context->profiler);
         js_context->profiler = NULL;
     }
+    
+    g_clear_object(&js_context->hooks);
 
     if (js_context->global != NULL) {
         js_context->global = NULL;
@@ -637,7 +641,8 @@ gjs_context_constructed(GObject *object)
                                   js_context->global))
         g_error("Failed to point 'imports' property at root importer");
 
-    js_context->profiler = gjs_profiler_new(js_context->runtime);
+    js_context->hooks = gjs_debug_hooks_new(js_context);
+    js_context->profiler = gjs_profiler_new(js_context->hooks);
 
     JS_SetGCCallback(js_context->runtime, gjs_on_context_gc);
 
@@ -922,6 +927,12 @@ gjs_context_define_string_array(GjsContext  *js_context,
     }
 
     return TRUE;
+}
+
+GjsDebugHooks *
+gjs_context_get_debug_hooks(GjsContext *js_context)
+{
+    return js_context->hooks;
 }
 
 GjsContext *
