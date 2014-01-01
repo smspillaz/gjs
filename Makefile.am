@@ -107,6 +107,11 @@ libgjs_la_SOURCES =		\
 	gjs/importer.cpp		\
 	gjs/gi.h		\
 	gjs/gi.cpp		\
+	gjs/reflected-executable-script.cpp \
+	gjs/reflected-executable-script.h \
+	gjs/reflected-script.cpp \
+	gjs/reflected-script.h \
+	gjs/reflected-script-private.h \
 	gjs/jsapi-private.cpp	\
 	gjs/jsapi-util.cpp	\
 	gjs/jsapi-dynamic-class.cpp \
