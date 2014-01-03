@@ -728,8 +728,8 @@ gjs_context_constructor (GType                  type,
                                   js_context->global))
         g_error("Failed to point 'imports' property at root importer");
 
-    js_context->profiler = gjs_profiler_new(js_context->runtime);
     js_context->hooks = GJS_DEBUG_HOOKS_INTERFACE(gjs_multiplexed_debug_hooks_new(js_context));
+    js_context->profiler = gjs_profiler_new(js_context->hooks);
 
     JS_SetGCCallback(js_context->runtime, gjs_on_context_gc);
 
