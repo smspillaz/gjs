@@ -27,15 +27,18 @@
 #include <locale.h>
 
 #include <gjs/gjs.h>
+#include <gjs/coverage.h>
 
 static char **include_path = NULL;
+static char **coverage_paths = NULL;
+static char *coverage_output_path = NULL;
 static char *command = NULL;
-static char *js_version= NULL;
 
 static GOptionEntry entries[] = {
     { "command", 'c', 0, G_OPTION_ARG_STRING, &command, "Program passed in as a string", "COMMAND" },
+    { "coverage-path", 'C', 0, G_OPTION_ARG_STRING_ARRAY, &coverage_paths, "Add the directory DIR to the list of directories to generate coverage info for", "DIR" },
+    { "coverage-output", 0, 0, G_OPTION_ARG_STRING, &coverage_output_path, "Write coverage output to a directory DIR. This option is mandatory when using --coverage-path", "DIR", },
     { "include-path", 'I', 0, G_OPTION_ARG_STRING_ARRAY, &include_path, "Add the directory DIR to the list of directories to search for js files.", "DIR" },
-    { "js-version", 0, 0, G_OPTION_ARG_STRING, &js_version, "JavaScript version (e.g. \"default\", \"1.8\"", "JSVERSION" },
     { NULL }
 };
 
@@ -53,19 +56,40 @@ print_help (GOptionContext *context,
   exit (0);
 }
 
+static GValue *
+init_array_parameter(GArray      *array,
+                     guint       index,
+                     const gchar *name,
+                     GType       type)
+{
+    if (index >= array->len)
+        g_array_set_size(array, index + 1);
+
+    GParameter *param = &(g_array_index(array, GParameter, index));
+    param->name = name;
+    g_value_init(&param->value, type);
+    return &param->value;
+}
+
+static void
+clear_array_parameter_value(gpointer value)
+{
+    GParameter *parameter = (GParameter *) value;
+    g_value_unset(&parameter->value);
+}
+
 int
 main(int argc, char **argv)
 {
-    char *command_line;
     GOptionContext *context;
     GError *error = NULL;
     GjsContext *js_context;
+    GjsCoverage *coverage = NULL;
     char *script;
     const char *filename;
     const char *program_name;
     gsize len;
     int code;
-    const char *source_js_version;
 
     context = g_option_context_new(NULL);
 
@@ -88,17 +112,12 @@ main(int argc, char **argv)
 
     setlocale(LC_ALL, "");
 
-    command_line = g_strjoinv(" ", argv);
-    g_free(command_line);
-
     if (command != NULL) {
         script = command;
-        source_js_version = gjs_context_scan_buffer_for_js_version(script, 1024);
         len = strlen(script);
         filename = "<command line>";
         program_name = argv[0];
     } else if (argc <= 1) {
-        source_js_version = NULL;
         script = g_strdup("const Console = imports.console; Console.interact();");
         len = strlen(script);
         filename = "<stdin>";
@@ -109,33 +128,31 @@ main(int argc, char **argv)
             g_printerr("%s\n", error->message);
             exit(1);
         }
-        source_js_version = gjs_context_scan_buffer_for_js_version(script, 1024);
         filename = argv[1];
         program_name = argv[1];
         argc--;
         argv++;
     }
 
-    /* If user explicitly specifies a version, use it */
-    if (js_version != NULL)
-        source_js_version = js_version;
-    if (source_js_version != NULL)
-        js_context = (GjsContext*) g_object_new(GJS_TYPE_CONTEXT,
-                                  "search-path", include_path,
-                                  "js-version", source_js_version,
-                                  "program-name", program_name,
-                                  NULL);
-    else
-        js_context = (GjsContext*) g_object_new(GJS_TYPE_CONTEXT,
-                                  "search-path", include_path,
-                                  "program-name", program_name,
-                                  NULL);
+    js_context = (GjsContext*) g_object_new(GJS_TYPE_CONTEXT,
+                                            "search-path", include_path,
+                                            "program-name", program_name,
+                                            NULL);
+
+    if (coverage_paths) {
+        if (!coverage_output_path)
+            g_error("--coverage-output-path is required when taking coverage statistics");
+
+        coverage = gjs_coverage_new(gjs_context_get_debug_hooks(js_context),
+                                    (const gchar **) coverage_paths);
+    }
 
     /* prepare command line arguments */
     if (!gjs_context_define_string_array(js_context, "ARGV",
                                          argc - 1, (const char**)argv + 1,
                                          &error)) {
         g_printerr("Failed to defined ARGV: %s", error->message);
+        g_object_unref(js_context);
         exit(1);
     }
 
@@ -145,8 +162,18 @@ main(int argc, char **argv)
                           filename, &code, &error)) {
         g_free(script);
         g_printerr("%s\n", error->message);
+        g_object_unref(js_context);
         exit(1);
     }
+
+    if (coverage) {
+        gjs_coverage_write_statistics(coverage,
+                                      coverage_output_path);
+
+        g_clear_object(&coverage);
+    }
+
+    g_object_unref(js_context);
 
     g_free(script);
     exit(code);

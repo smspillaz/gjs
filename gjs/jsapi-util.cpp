@@ -27,6 +27,7 @@
 #include <util/log.h>
 #include <util/glib.h>
 #include <util/misc.h>
+#include <util/error.h>
 
 #include "jsapi-util.h"
 #include "compat.h"
@@ -88,17 +89,12 @@ static JSClass global_class = {
  * Returns: %TRUE on success, %FALSE otherwise
  */
 gboolean
-gjs_init_context_standard (JSContext       *context,
-                           JSVersion        js_version)
+gjs_init_context_standard (JSContext *context)
 {
     JSObject *global;
     JS::CompartmentOptions options;
 
-    gjs_debug(GJS_DEBUG_CONTEXT,
-              "Setting JavaScript version to %s",
-              JS_VersionToString(js_version));
-
-    options.setVersion(js_version);
+    options.setVersion(JSVERSION_LATEST);
     global = JS_NewGlobalObject(context, &global_class, NULL, options);
     if (global == NULL)
         return FALSE;
@@ -1169,4 +1165,117 @@ void
 gjs_unblock_gc(void)
 {
     g_mutex_unlock(&gc_lock);
+}
+
+const char *
+gjs_strip_unix_shebang(const char  *script,
+                       gssize      *script_len,
+                       int         *start_line_number_out)
+{
+    g_assert(script_len);
+
+    /* handle scripts with UNIX shebangs */
+    if (strncmp(script, "#!", 2) == 0) {
+        /* If we found a newline, advance the script by one line */
+        const char *s = (const char *) strstr (script, "\n");
+        if (s != NULL) {
+            if (*script_len > 0)
+                *script_len -= (s + 1 - script);
+            script = s + 1;
+
+            if (start_line_number_out)
+                *start_line_number_out = 2;
+
+            return script;
+        } else {
+            /* Just a shebang */
+            if (start_line_number_out)
+                *start_line_number_out = -1;
+
+            *script_len = 0;
+
+            return NULL;
+        }
+    }
+
+    /* No shebang, return the original script */
+    if (start_line_number_out)
+        *start_line_number_out = 1;
+
+    return script;
+}
+
+JSBool
+gjs_eval_with_scope(JSContext    *context,
+                    JSObject     *object,
+                    const char   *script,
+                    gssize        script_len,
+                    const char   *filename,
+                    jsval        *retval_p,
+                    GError      **error)
+{
+    JSBool ret = JS_FALSE;
+    int start_line_number;
+    jsval retval = JSVAL_VOID;
+
+    if (script_len < 0)
+        script_len = strlen(script);
+
+    script = gjs_strip_unix_shebang(script,
+                                    &script_len,
+                                    &start_line_number);
+
+    /* log and clear exception if it's set (should not be, normally...) */
+    if (gjs_log_exception(context)) {
+        gjs_debug(GJS_DEBUG_CONTEXT,
+                  "Exception was set prior to JS_EvaluateScript()");
+    }
+
+    /* JS_EvaluateScript requires a request even though it sort of seems like
+     * it means we're always in a request?
+     */
+    JS_BeginRequest(context);
+
+    if (!object)
+        object = JS_GetGlobalObject(context);
+
+    JSAutoCompartment ac(context, object);
+
+    JS::CompileOptions options(context);
+    options.setUTF8(true)
+           .setFileAndLine(filename, start_line_number)
+           .setSourcePolicy(JS::CompileOptions::LAZY_SOURCE);
+
+    js::RootedObject rootedObj(context, object);
+
+    if (!JS::Evaluate(context, rootedObj, options, script, script_len, &retval)) {
+        gjs_debug(GJS_DEBUG_CONTEXT,
+                  "Script evaluation failed");
+
+        gjs_log_exception(context);
+        g_set_error(error,
+                    GJS_ERROR,
+                    GJS_ERROR_FAILED,
+                    "JS_EvaluateScript() failed");
+        goto out;
+    }
+
+    gjs_debug(GJS_DEBUG_CONTEXT,
+              "Script evaluation succeeded");
+
+    if (gjs_log_exception(context)) {
+        g_set_error(error,
+                    GJS_ERROR,
+                    GJS_ERROR_FAILED,
+                    "Exception was set even though JS_EvaluateScript() returned true - did you gjs_throw() but not return false somewhere perhaps?");
+        goto out;
+    }
+
+    ret = JS_TRUE;
+    if (retval_p)
+        *retval_p = retval;
+
+ out:
+    JS_EndRequest(context);
+    return ret;
 }

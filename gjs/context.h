@@ -35,6 +35,8 @@ G_BEGIN_DECLS
 typedef struct _GjsContext      GjsContext;
 typedef struct _GjsContextClass GjsContextClass;
 
+typedef struct _GjsDebugHooks   GjsDebugHooks;
+
 #define GJS_TYPE_CONTEXT              (gjs_context_get_type ())
 #define GJS_CONTEXT(object)           (G_TYPE_CHECK_INSTANCE_CAST ((object), GJS_TYPE_CONTEXT, GjsContext))
 #define GJS_CONTEXT_CLASS(klass)      (G_TYPE_CHECK_CLASS_CAST ((klass), GJS_TYPE_CONTEXT, GjsContextClass))
@@ -43,9 +45,6 @@ typedef struct _GjsContextClass GjsContextClass;
 #define GJS_CONTEXT_GET_CLASS(obj)    (G_TYPE_INSTANCE_GET_CLASS ((obj), GJS_TYPE_CONTEXT, GjsContextClass))
 
 GType           gjs_context_get_type             (void) G_GNUC_CONST;
-
-const char *    gjs_context_scan_file_for_js_version (const char *file_path);
-const char *    gjs_context_scan_buffer_for_js_version (const char *buffer, gssize len);
 
 GjsContext*     gjs_context_new                  (void);
 GjsContext*     gjs_context_new_with_search_path (char         **search_path);
@@ -64,11 +63,14 @@ gboolean        gjs_context_define_string_array  (GjsContext  *js_context,
                                                   gssize         array_length,
                                                   const char   **array_values,
                                                   GError       **error);
+GjsDebugHooks*  gjs_context_get_debug_hooks      (GjsContext *js_context);
 
 GList*          gjs_context_get_all              (void);
 
 GjsContext     *gjs_context_get_current          (void);
 void            gjs_context_make_current         (GjsContext *js_context);
+void            gjs_context_push                 (GjsContext *js_context);
+GjsContext     *gjs_context_pop                  (void);
 
 void*           gjs_context_get_native_context   (GjsContext *js_context);
 

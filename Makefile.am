@@ -11,17 +11,12 @@ dist_gjsjs_DATA =
 BUILT_SOURCES =
 CLEANFILES =
 EXTRA_DIST =
-gjstest_files_with_tests =
 TEST_PROGS =
 check_PROGRAMS = $(TEST_PROGS)
 INTROSPECTION_GIRS =
 ACLOCAL_AMFLAGS = ${ACLOCAL_FLAGS}
 AM_CFLAGS = $(WARN_CFLAGS) -DG_LOG_DOMAIN=\"Gjs\"
 AM_CPPFLAGS = $(WARN_CXXFLAGS) -DG_LOG_DOMAIN=\"Gjs\"
-
-gjsjsdir = @gjsjsdir@
-gjsoverridedir = $(gjsjsdir)/overrides
-gjstweenerdir = $(gjsjsdir)/tweener
 
 gjs_public_includedir = $(includedir)/gjs-1.0
 gjs_module_includedir = $(includedir)/gjs-1.0
@@ -41,6 +36,9 @@ nobase_gjs_module_include_HEADERS =	\
 	gjs/type-module.h	\
 	gjs/mem.h		\
 	gjs/native.h	\
+	gjs/reflected-script.h \
+	gjs/debug-hooks.h \
+	gjs/coverage.h \
 	gi/ns.h	        \
 	gi/object.h	\
 	gi/foreign.h	\
@@ -61,6 +59,8 @@ nobase_gjs_module_include_HEADERS =	\
 noinst_HEADERS +=		\
 	gjs/jsapi-private.h	\
 	gjs/profiler.h		\
+	gjs/reflected-script-private.h \
+	gjs/debug-hooks-private.h \
 	gi/proxyutils.h		\
 	util/crash.h		\
 	util/hash-x32.h		\
@@ -80,7 +80,6 @@ EXTRA_DIST += 			\
 ########################################################################
 gjs_directory_defines = 				\
 	-DGJS_TOP_SRCDIR=\"$(top_srcdir)\"		\
-	-DGJS_JS_DIR=\"$(gjsjsdir)\"			\
 	-DPKGLIBDIR=\"$(pkglibdir)\"
 
 ########################################################################
@@ -108,6 +107,9 @@ libgjs_la_SOURCES =		\
 	gjs/importer.cpp		\
 	gjs/gi.h		\
 	gjs/gi.cpp		\
+	gjs/reflected-script.cpp \
+	gjs/debug-hooks.cpp \
+	gjs/coverage.cpp \
 	gjs/jsapi-private.cpp	\
 	gjs/jsapi-util.cpp	\
 	gjs/jsapi-dynamic-class.cpp \
@@ -176,14 +178,6 @@ libgjs_la_LIBADD += gjs_gi_probes.o
 endif
 EXTRA_DIST += gi/gjs_gi_probes.d
 
-gjstest_files_with_tests += 	\
-	gjs/context.cpp		\
-	gjs/jsapi-util-array.cpp	\
-	gjs/jsapi-util-error.cpp	\
-	gjs/jsapi-util-string.cpp	\
-	gjs/stack.cpp				\
-	util/glib.cpp
-
 tapset_in_files = gjs/gjs.stp.in
 EXTRA_DIST += $(tapset_in_files)
 if ENABLE_SYSTEMTAP
@@ -204,10 +198,10 @@ bin_PROGRAMS += gjs-console
 
 gjs_console_CPPFLAGS = 		\
 	$(AM_CPPFLAGS)		\
-        $(GOBJECT_CFLAGS)
+        $(GJS_CONSOLE_CFLAGS)
 gjs_console_LDADD =		\
-	$(JS_LIBS)		\
-	$(GOBJECT_LIBS)		\
+        $(JS_LIBS)		\
+        $(GJS_CONSOLE_LIBS)	\
 	libgjs.la
 gjs_console_LDFLAGS = -rdynamic
 gjs_console_SOURCES = gjs/console.cpp

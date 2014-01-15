@@ -23,7 +23,10 @@
 
 #include <config.h>
 
+#include <gio/gio.h>
+
 #include "context.h"
+#include "debug-hooks.h"
 #include "importer.h"
 #include "jsapi-util.h"
 #include "profiler.h"
@@ -43,13 +46,9 @@
 
 #include <string.h>
 
-#define _GJS_JS_VERSION_DEFAULT "1.8"
-
 static void     gjs_context_dispose           (GObject               *object);
 static void     gjs_context_finalize          (GObject               *object);
-static GObject* gjs_context_constructor       (GType                  type,
-                                                  guint                  n_construct_properties,
-                                                  GObjectConstructParam *construct_params);
+static void     gjs_context_constructed       (GObject               *object);
 static void     gjs_context_get_property      (GObject               *object,
                                                   guint                  prop_id,
                                                   GValue                *value,
@@ -68,9 +67,9 @@ struct _GjsContext {
     JSContext *context;
     JSObject *global;
 
+    GjsDebugHooks *hooks;
     GjsProfiler *profiler;
 
-    char *jsversion_string;
     char *program_name;
 
     char **search_path;
@@ -95,7 +94,6 @@ static int signals[LAST_SIGNAL];
 
 enum {
     PROP_0,
-    PROP_JS_VERSION,
     PROP_SEARCH_PATH,
     PROP_GC_NOTIFICATIONS,
     PROP_PROGRAM_NAME,
@@ -105,6 +103,7 @@ enum {
 static GMutex gc_idle_lock;
 static GMutex contexts_lock;
 static GList *all_contexts = NULL;
+static GList *context_stack = NULL;
 
 
 static JSBool
@@ -281,9 +280,7 @@ gjs_printerr(JSContext *context,
 static void
 gjs_context_init(GjsContext *js_context)
 {
-    js_context->jsversion_string = g_strdup(_GJS_JS_VERSION_DEFAULT);
-
-    gjs_context_make_current(js_context);
+    gjs_context_push(js_context);
 }
 
 static void
@@ -295,7 +292,7 @@ gjs_context_class_init(GjsContextClass *klass)
     object_class->dispose = gjs_context_dispose;
     object_class->finalize = gjs_context_finalize;
 
-    object_class->constructor = gjs_context_constructor;
+    object_class->constructed = gjs_context_constructed;
     object_class->get_property = gjs_context_get_property;
     object_class->set_property = gjs_context_set_property;
 
@@ -307,16 +304,6 @@ gjs_context_class_init(GjsContextClass *klass)
 
     g_object_class_install_property(object_class,
                                     PROP_SEARCH_PATH,
-                                    pspec);
-
-    pspec = g_param_spec_string("js-version",
-                                 "JS Version",
-                                 "A string giving the default for the (SpiderMonkey) JavaScript version",
-                                 _GJS_JS_VERSION_DEFAULT,
-                                 (GParamFlags) (G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
-
-    g_object_class_install_property(object_class,
-                                    PROP_JS_VERSION,
                                     pspec);
 
     pspec = g_param_spec_boolean("gc-notifications",
@@ -370,6 +357,8 @@ gjs_context_dispose(GObject *object)
         gjs_profiler_free(js_context->profiler);
         js_context->profiler = NULL;
     }
+    
+    g_clear_object(&js_context->hooks);
 
     if (js_context->global != NULL) {
         js_context->global = NULL;
@@ -420,12 +409,13 @@ gjs_context_finalize(GObject *object)
         js_context->search_path = NULL;
     }
 
-    g_free(js_context->jsversion_string);
-
-    if (gjs_context_get_current() == (GjsContext*)object)
-        gjs_context_make_current(NULL);
+    if (js_context->program_name != NULL) {
+        g_free(js_context->program_name);
+        js_context->program_name = NULL;
+    }
 
     g_mutex_lock(&contexts_lock);
+    context_stack = g_list_remove_all(context_stack, object);
     all_contexts = g_list_remove(all_contexts, object);
     g_mutex_unlock(&contexts_lock);
 
@@ -548,21 +538,13 @@ static JSLocaleCallbacks gjs_locale_callbacks =
     gjs_locale_to_unicode
 };
 
-static GObject*
-gjs_context_constructor (GType                  type,
-                         guint                  n_construct_properties,
-                         GObjectConstructParam *construct_params)
+static void
+gjs_context_constructed(GObject *object)
 {
-    GObject *object;
-    GjsContext *js_context;
+    GjsContext *js_context = GJS_CONTEXT(object);
     guint32 options_flags;
-    JSVersion js_version;
 
-    object = (* G_OBJECT_CLASS (gjs_context_parent_class)->constructor) (type,
-                                                                         n_construct_properties,
-                                                                         construct_params);
-
-    js_context = GJS_CONTEXT(object);
+    G_OBJECT_CLASS(gjs_context_parent_class)->constructed(object);
 
     js_context->runtime = JS_NewRuntime(32*1024*1024 /* max bytes */, JS_USE_HELPER_THREADS);
     JS_SetNativeStackQuota(js_context->runtime, 1024*1024);
@@ -577,7 +559,6 @@ gjs_context_constructor (GType                  type,
     gjs_runtime_init_for_context(js_context->runtime, js_context->context);
 
     JS_BeginRequest(js_context->context);
-
 
     /* JSOPTION_DONT_REPORT_UNCAUGHT: Don't send exceptions to our
      * error report handler; instead leave them set.  This allows us
@@ -602,14 +583,7 @@ gjs_context_constructor (GType                  type,
     /* set ourselves as the private data */
     JS_SetContextPrivate(js_context->context, js_context);
 
-    js_version = JS_StringToVersion(js_context->jsversion_string);
-    /* It doesn't make sense to throw here; just use the default if we
-     * don't know.
-     */
-    if (js_version == JSVERSION_UNKNOWN)
-        js_version = JSVERSION_DEFAULT;
-
-    if (!gjs_init_context_standard(js_context->context, js_version))
+    if (!gjs_init_context_standard(js_context->context))
         g_error("Failed to initialize context");
 
     js_context->global = JS_GetGlobalObject(js_context->context);
@@ -667,7 +641,8 @@ gjs_context_constructor (GType                  type,
                                   js_context->global))
         g_error("Failed to point 'imports' property at root importer");
 
-    js_context->profiler = gjs_profiler_new(js_context->runtime);
+    js_context->hooks = gjs_debug_hooks_new(js_context);
+    js_context->profiler = gjs_profiler_new(js_context->hooks);
 
     JS_SetGCCallback(js_context->runtime, gjs_on_context_gc);
 
@@ -676,8 +651,6 @@ gjs_context_constructor (GType                  type,
     g_mutex_lock (&contexts_lock);
     all_contexts = g_list_prepend(all_contexts, object);
     g_mutex_unlock (&contexts_lock);
-
-    return object;
 }
 
 static void
@@ -691,9 +664,6 @@ gjs_context_get_property (GObject     *object,
     js_context = GJS_CONTEXT (object);
 
     switch (prop_id) {
-    case PROP_JS_VERSION:
-        g_value_set_string(value, js_context->jsversion_string);
-        break;
     case PROP_GC_NOTIFICATIONS:
         g_value_set_boolean(value, js_context->gc_notifications_enabled);
         break;
@@ -720,13 +690,6 @@ gjs_context_set_property (GObject      *object,
     case PROP_SEARCH_PATH:
         js_context->search_path = (char**) g_value_dup_boxed(value);
         break;
-    case PROP_JS_VERSION:
-        g_free(js_context->jsversion_string);
-        if (g_value_get_string (value) == NULL)
-            js_context->jsversion_string = g_strdup(_GJS_JS_VERSION_DEFAULT);
-        else
-            js_context->jsversion_string = g_value_dup_string(value);
-        break;
     case PROP_GC_NOTIFICATIONS:
         js_context->gc_notifications_enabled = g_value_get_boolean(value);
         break;
@@ -737,95 +700,6 @@ gjs_context_set_property (GObject      *object,
         G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
         break;
     }
-}
-
-/**
- * gjs_context_scan_buffer_for_js_version:
- * @buffer: A UTF-8 string
- * @maxbytes: Maximum number of bytes to scan in buffer
- *
- * Given a buffer of JavaScript source code (in UTF-8), look for a
- * comment in it which tells us which version to enable in the
- * SpiderMonkey engine.
- *
- * The comment is inspired by the Firefox MIME type, see e.g.
- * https://developer.mozilla.org/en/JavaScript/New_in_JavaScript/1.8
- *
- * A valid comment string looks like the following, on its own line:
- * <literal>// application/javascript;version=1.8</literal>
- *
- * Returns: A string suitable for use as the GjsContext::version property.
- *   If the version is unknown or invalid, %NULL will be returned.
- */
-const char *
-gjs_context_scan_buffer_for_js_version (const char *buffer,
-                                        gssize      maxbytes)
-{
-    const char *prefix = "// application/javascript;version=";
-    const char *substr;
-    JSVersion ver;
-    char buf[20];
-    gssize remaining_bytes;
-    guint i;
-
-    substr = g_strstr_len(buffer, maxbytes, prefix);
-    if (!substr)
-        return NULL;
-
-    remaining_bytes = maxbytes - ((substr - buffer) + strlen (prefix));
-    /* 20 should give us enough space for all the valid JS version strings; anyways
-     * it's really a bug if we're close to the limit anyways. */
-    if (remaining_bytes < (gssize)sizeof(buf)-1)
-        return NULL;
-
-    buf[sizeof(buf)-1] = '\0';
-    strncpy(buf, substr + strlen (prefix), sizeof(buf)-1);
-    for (i = 0; i < sizeof(buf)-1; i++) {
-        if (buf[i] == '\n') {
-            buf[i] = '\0';
-            break;
-        }
-    }
-
-    ver = JS_StringToVersion(buf);
-    if (ver == JSVERSION_UNKNOWN)
-        return NULL;
-    return JS_VersionToString(ver);
-}
-
-/**
- * gjs_context_scan_file_for_js_version:
- * @file_path: (type filename): A file path
- *
- * Like gjs_context_scan_buffer_for_js_version(), but will open
- * the file and use the initial 1024 bytes as a buffer.
- *
- * Returns: A string suitable for use as GjsContext::version property.
- */
-const char *
-gjs_context_scan_file_for_js_version (const char *file_path)
-{
-    char *utf8_buf;
-    guint8 buf[1024];
-    const char *version = NULL;
-    gssize len;
-    FILE *f;
-
-    f = fopen(file_path, "r");
-    if (!f)
-        return NULL;
-
-    len = fread(buf, 1, sizeof(buf)-1, f);
-    fclose(f);
-    if (len < 0)
-        return NULL;
-    buf[len] = '\0';
-
-    utf8_buf = _gjs_g_utf8_make_valid((const char*)buf);
-    version = gjs_context_scan_buffer_for_js_version(utf8_buf, sizeof(buf));
-    g_free(utf8_buf);
-
-    return version;
 }
 
 
@@ -959,101 +833,31 @@ gjs_context_get_native_context (GjsContext *js_context)
 }
 
 gboolean
-gjs_context_eval(GjsContext *js_context,
+gjs_context_eval(GjsContext   *js_context,
                  const char   *script,
                  gssize        script_len,
                  const char   *filename,
                  int          *exit_status_p,
                  GError      **error)
 {
-    int line_number;
+    gboolean ret = FALSE;
     jsval retval;
-    gboolean success;
 
     g_object_ref(G_OBJECT(js_context));
 
-    if (exit_status_p)
-        *exit_status_p = 1; /* "Failure" (like a shell script) */
+    if (!gjs_eval_with_scope(js_context->context,
+                             js_context->global,
+                             script, script_len, filename,
+                             &retval, error))
+        goto out;
 
-    /* whether we evaluated the script OK; not related to whether
-     * script returned nonzero. We set GError if success = FALSE
-     */
-    success = TRUE;
-
-    /* handle scripts with UNIX shebangs */
-    line_number = 1;
-    if (script != NULL && script[0] == '#' && script[1] == '!') {
-        const char *s;
-
-        s = (const char *) strstr (script, "\n");
-        if (s != NULL) {
-            if (script_len > 0)
-                script_len -= (s + 1 - script);
-            script = s + 1;
-            line_number = 2;
-        }
-    }
-
-    /* log and clear exception if it's set (should not be, normally...) */
-    if (gjs_log_exception(js_context->context)) {
-        gjs_debug(GJS_DEBUG_CONTEXT,
-                  "Exception was set prior to JS_EvaluateScript()");
-    }
-
-    /* JS_EvaluateScript requires a request even though it sort of seems like
-     * it means we're always in a request?
-     */
-    JS_BeginRequest(js_context->context);
-
-    retval = JSVAL_VOID;
-    if (script_len < 0)
-        script_len = strlen(script);
-
-    JSAutoCompartment ac(js_context->context, js_context->global);
-    JS::CompileOptions options(js_context->context);
-    options.setUTF8(true)
-           .setFileAndLine(filename, line_number)
-           .setSourcePolicy(JS::CompileOptions::LAZY_SOURCE);
-    js::RootedObject rootedObj(js_context->context, js_context->global);
-
-    if (!JS::Evaluate(js_context->context,
-                      rootedObj,
-                      options,
-                      script,
-                      script_len,
-                      &retval)) {
-
-        gjs_debug(GJS_DEBUG_CONTEXT,
-                  "Script evaluation failed");
-
-        gjs_log_exception(js_context->context);
-        g_set_error(error,
-                    GJS_ERROR,
-                    GJS_ERROR_FAILED,
-                    "JS_EvaluateScript() failed");
-
-        success = FALSE;
-    }
-
-    gjs_debug(GJS_DEBUG_CONTEXT,
-              "Script evaluation succeeded");
-
-    if (gjs_log_exception(js_context->context)) {
-        g_set_error(error,
-                    GJS_ERROR,
-                    GJS_ERROR_FAILED,
-                    "Exception was set even though JS_EvaluateScript() returned true - did you gjs_throw() but not return false somewhere perhaps?");
-        success = FALSE;
-    }
-
-    if (success && exit_status_p) {
+    if (exit_status_p) {
         if (JSVAL_IS_INT(retval)) {
             int code;
             if (JS_ValueToInt32(js_context->context, retval, &code)) {
 
                 gjs_debug(GJS_DEBUG_CONTEXT,
                           "Script returned integer code %d", code);
-
                 *exit_status_p = code;
             }
         } else {
@@ -1062,32 +866,44 @@ gjs_context_eval(GjsContext *js_context,
         }
     }
 
-    JS_EndRequest(js_context->context);
+    ret = TRUE;
 
+ out:
     g_object_unref(G_OBJECT(js_context));
-
-    return success;
+    return ret;
 }
 
 gboolean
-gjs_context_eval_file(GjsContext  *js_context,
+gjs_context_eval_file(GjsContext    *js_context,
                       const char    *filename,
                       int           *exit_status_p,
                       GError       **error)
 {
-    char *script;
-    gsize script_len;
+    char     *script = NULL;
+    gsize    script_len;
+    gboolean ret = TRUE;
 
-    if (!g_file_get_contents(filename, &script, &script_len, error))
-        return FALSE;
+    GFile *file = g_file_new_for_commandline_arg(filename);
 
-    if (!gjs_context_eval(js_context, script, script_len, filename, exit_status_p, error)) {
-        g_free(script);
-        return FALSE;
+    if (!g_file_query_exists(file, NULL)) {
+        ret = FALSE;
+        goto out;
     }
 
+    if (!g_file_load_contents(file, NULL, &script, &script_len, NULL, error)) {
+        ret = FALSE;
+        goto out;
+    }
+
+    if (!gjs_context_eval(js_context, script, script_len, filename, exit_status_p, error)) {
+        ret = FALSE;
+        goto out;
+    }
+
+out:
     g_free(script);
-    return TRUE;
+    g_object_unref(file);
+    return ret;
 }
 
 gboolean
@@ -1113,18 +929,47 @@ gjs_context_define_string_array(GjsContext  *js_context,
     return TRUE;
 }
 
-static GjsContext *current_context;
+GjsDebugHooks *
+gjs_context_get_debug_hooks(GjsContext *js_context)
+{
+    return js_context->hooks;
+}
 
 GjsContext *
-gjs_context_get_current (void)
+gjs_context_get_current(void)
 {
+    GjsContext *current_context = NULL;
+    g_mutex_lock(&contexts_lock);
+    if (context_stack)
+        current_context = (GjsContext *) (g_list_last(context_stack))->data;
+    g_mutex_unlock(&contexts_lock);
     return current_context;
 }
 
 void
-gjs_context_make_current (GjsContext *context)
+gjs_context_push(GjsContext *context)
 {
-    g_assert (context == NULL || current_context == NULL);
+    g_mutex_lock(&contexts_lock);
+    context_stack = g_list_append(context_stack, context);
+    g_mutex_unlock(&contexts_lock);
+}
 
-    current_context = context;
+GjsContext *
+gjs_context_pop(void)
+{
+    GjsContext *last = NULL;
+    g_mutex_lock(&contexts_lock);
+    GList *last_link = g_list_last(context_stack);
+    if (last_link) {
+        last = (GjsContext *) last_link->data;
+        context_stack = g_list_remove_link(context_stack, last_link);
+    }
+    g_mutex_unlock(&contexts_lock);
+    return last;
+}
+
+void
+gjs_context_make_current(GjsContext *context)
+{
+    gjs_context_push(context);
 }

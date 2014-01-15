@@ -28,6 +28,8 @@
 #include <util/glib.h>
 #include <util/crash.h>
 
+#include "gjs-tests-add-funcs.h"
+
 typedef struct _GjsUnitTestFixture GjsUnitTestFixture;
 
 struct _GjsUnitTestFixture {
@@ -299,6 +301,99 @@ gjstest_test_func_util_glib_strv_concat_pointers(void)
     g_strfreev(ret);
 }
 
+static void
+gjstest_test_strip_shebang_no_advance_for_no_shebang(void)
+{
+    const char *script = "foo\nbar";
+    gssize     script_len_original = strlen(script);
+    gssize     script_len = script_len_original;
+    int        line_number = 1;
+
+    const char *stripped = gjs_strip_unix_shebang(script,
+                                                  &script_len,
+                                                  &line_number);
+
+    g_assert_cmpstr(script, ==, stripped);
+    g_assert(script_len == script_len_original);
+    g_assert(line_number == 1);
+}
+
+static void
+gjstest_test_strip_shebang_advance_for_shebang(void)
+{
+    const char *script = "#!foo\nbar";
+    gssize     script_len_original = strlen(script);
+    gssize     script_len = script_len_original;
+    int        line_number = 1;
+
+    const char *stripped = gjs_strip_unix_shebang(script,
+                                                  &script_len,
+                                                  &line_number);
+
+    g_assert_cmpstr(stripped, ==, "bar");
+    g_assert(script_len == 3);
+    g_assert(line_number == 2);
+}
+
+static void
+gjstest_test_strip_shebang_return_null_for_just_shebang(void)
+{
+    const char *script = "#!foo";
+    gssize     script_len_original = strlen(script);
+    gssize     script_len = script_len_original;
+    int        line_number = 1;
+
+    const char *stripped = gjs_strip_unix_shebang(script,
+                                                  &script_len,
+                                                  &line_number);
+
+    g_assert(stripped == NULL);
+    g_assert(script_len == 0);
+    g_assert(line_number == -1);
+}
+
+static void
+gjstest_test_context_pushed_on_creation(void)
+{
+    GjsContext *context = gjs_context_new();
+    g_assert(gjs_context_get_current() == context);
+    g_object_unref(context);
+}
+
+static void
+gjstest_test_context_removed_on_deletion(void)
+{
+    GjsContext *context = gjs_context_new();
+    g_object_unref(context);
+    g_assert(gjs_context_get_current() == NULL);
+}
+
+static void
+gjstest_test_all_instances_removed_on_deletion(void)
+{
+    GjsContext *context = gjs_context_new();
+    GjsContext *other = gjs_context_new();
+
+    gjs_context_push(context);
+    gjs_context_push(other);
+    gjs_context_push(context);
+    gjs_context_push(context);
+
+    g_object_unref(context);
+
+    g_assert(gjs_context_get_current() == other);
+    g_object_unref(other);
+}
+
+static void
+gjstest_test_pop_context(void)
+{
+    GjsContext *context = gjs_context_new();
+    gjs_context_pop();
+    g_assert(gjs_context_get_current() == NULL);
+    g_object_unref(context);
+}
+
 int
 main(int    argc,
      char **argv)
@@ -313,9 +408,20 @@ main(int    argc,
     g_test_add_func("/gjs/jsapi/util/array", gjstest_test_func_gjs_jsapi_util_array);
     g_test_add_func("/gjs/jsapi/util/error/throw", gjstest_test_func_gjs_jsapi_util_error_throw);
     g_test_add_func("/gjs/jsapi/util/string/js/string/utf8", gjstest_test_func_gjs_jsapi_util_string_js_string_utf8);
+    g_test_add_func("/gjs/jsutil/strip_shebang/no_shebang", gjstest_test_strip_shebang_no_advance_for_no_shebang);
+    g_test_add_func("/gjs/jsutil/strip_shebang/have_shebang", gjstest_test_strip_shebang_advance_for_shebang);
+    g_test_add_func("/gjs/jsutil/strip_shebang/only_shebang", gjstest_test_strip_shebang_return_null_for_just_shebang);
+    g_test_add_func("/gjs/context_stack/creation", gjstest_test_context_pushed_on_creation);
+    g_test_add_func("/gjs/context_stack/removed_on_deletion", gjstest_test_context_removed_on_deletion);
+    g_test_add_func("/gjs/context_stack/all_removed_on_deletion", gjstest_test_all_instances_removed_on_deletion);
+    g_test_add_func("/gjs/context_stack/pop_context", gjstest_test_pop_context);
     g_test_add_func("/gjs/stack/dump", gjstest_test_func_gjs_stack_dump);
     g_test_add_func("/util/glib/strv/concat/null", gjstest_test_func_util_glib_strv_concat_null);
     g_test_add_func("/util/glib/strv/concat/pointers", gjstest_test_func_util_glib_strv_concat_pointers);
+
+    gjs_test_add_tests_for_reflected_script();
+    gjs_test_add_tests_for_debug_hooks ();
+    gjs_test_add_tests_for_coverage ();
 
     g_test_run();
 

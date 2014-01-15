@@ -270,7 +270,6 @@ import_file(JSContext  *context,
     GError *error = NULL;
 
     JS::CompileOptions options(context);
-    js::RootedObject rootedObj(context, module_obj);
 
     if (!(g_file_load_contents(file, NULL, &script, &script_len, NULL, &error))) {
         if (!g_error_matches(error, G_IO_ERROR, G_IO_ERROR_IS_DIRECTORY) &&
@@ -287,35 +286,9 @@ import_file(JSContext  *context,
 
     full_path = g_file_get_parse_name (file);
 
-
-    options.setUTF8(true)
-           .setFileAndLine(full_path, 1)
-           .setSourcePolicy(JS::CompileOptions::LAZY_SOURCE);
-
-    if (!JS::Evaluate(context,
-                      rootedObj,
-                      options,
-                      script,
-                      script_len,
-                      &script_retval)) {
-
-
-        /* If JSOPTION_DONT_REPORT_UNCAUGHT is set then the exception
-         * would be left set after the evaluate and not go to the error
-         * reporter function.
-         */
-        if (JS_IsExceptionPending(context)) {
-            gjs_debug(GJS_DEBUG_IMPORTER,
-                      "Module '%s' left an exception set",
-                      name);
-            gjs_log_and_keep_exception(context);
-        } else {
-            gjs_throw(context,
-                         "JS_EvaluateScript() returned FALSE but did not set exception");
-        }
-
+    if (!gjs_eval_with_scope(context, module_obj, script, script_len,
+                             full_path, NULL, NULL))
         goto out;
-    }
 
     ret = JS_TRUE;
 
@@ -1066,16 +1039,8 @@ gjs_get_search_path(void)
             g_free(dirs);
         }
 
-        /* $XDG_DATA_DIRS /gjs-1.0 */
-        system_data_dirs = g_get_system_data_dirs();
-        for (i = 0; system_data_dirs[i] != NULL; ++i) {
-            char *s;
-            s = g_build_filename(system_data_dirs[i], "gjs-1.0", NULL);
-            g_ptr_array_add(path, s);
-        }
-
         /* ${datadir}/share/gjs-1.0 */
-        g_ptr_array_add(path, g_strdup(GJS_JS_DIR));
+        g_ptr_array_add(path, g_strdup("resource:///org/gnome/gjs/modules/"));
 
         g_ptr_array_add(path, NULL);
 
