@@ -401,11 +401,13 @@ function testVFuncs() {
     assertEquals(50, c);
 }
 
-function testInterfaces() {
-    let ifaceImpl = new GIMarshallingTests.InterfaceImpl();
-    let itself = ifaceImpl.get_as_interface();
-
-    assertEquals(ifaceImpl, itself);
-}
+// GIMarshallingTests.InterfaceImpl is only available in
+// gobject-introspection master, so comment this out.
+//function testInterfaces() {
+//    let ifaceImpl = new GIMarshallingTests.InterfaceImpl();
+//    let itself = ifaceImpl.get_as_interface();
+//
+//    assertEquals(ifaceImpl, itself);
+//}
 
 gjstestRun();
