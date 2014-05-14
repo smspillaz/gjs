@@ -142,8 +142,10 @@ resolve_namespace_object(JSContext  *context,
                                            OBJECT_TO_JSVAL(override), /* callee */
                                            0, /* argc */
                                            NULL, /* argv */
-                                           &result))
+                                           &result)) {
+        gjs_log_exception(context);
         goto out;
+    }
 
     gjs_debug(GJS_DEBUG_GNAMESPACE,
               "Defined namespace '%s' %p in GIRepository %p", ns_name, gi_namespace, repo_obj);
