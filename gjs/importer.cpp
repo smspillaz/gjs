@@ -615,12 +615,18 @@ do_import(JSContext  *context,
     g_free(filename);
     g_free(dirname);
 
-    if (!result &&
-        !JS_IsExceptionPending(context)) {
-        /* If no exception occurred, the problem is just that we got to the
-         * end of the path. Be sure an exception is set.
+    if (!result) {
+        /* A bit of explaining in order here. We log javascript errors from
+         * imported files right away. If no exception occurred, the problem is
+         * just that we got to the end of the path and no file was found. We
+         * can't log that right away because we search for a override file for
+         * each GI repository and ignore the error if none are found.
          */
-        gjs_throw(context, "No JS module '%s' found in search path", name);
+        if (JS_IsExceptionPending(context)) {
+            gjs_log_exception(context);
+        } else {
+            gjs_throw(context, "No JS module '%s' found in search path", name);
+        }
     }
 
     return result;
