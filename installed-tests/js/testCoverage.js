@@ -314,6 +314,17 @@ function testFunctionsFoundOnSameLineButDifferentiatedOnArgs() {
                       functionDeclarationsEqual);
 }
 
+function testFunctionsUsedAsObjectFound() {
+    let foundFunctions =
+        parseScriptForFunctionNames("f = function() { }.bind();\n");
+
+    assertArrayEquals(foundFunctions,
+                      [
+                          { name: null, line: 1, n_params: 0 }
+                      ],
+                      functionDeclarationsEqual);
+}
+
 function parseScriptForBranches(script) {
     const ast = Reflect.parse(script);
     return Coverage.branchesForAST(ast);

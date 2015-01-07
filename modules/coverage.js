@@ -111,6 +111,16 @@ function getSubNodesForNode(node) {
         });
 
         break;
+
+    /* Both the object and property (if using the
+     * object[property] syntax) could be an expression */
+    case 'MemberExpression':
+        subNodes.push(node.object);
+        if (node.computed) {
+            subNodes.push(node.property);
+        }
+
+        break;
     }
 
     return subNodes;
