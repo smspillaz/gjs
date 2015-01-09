@@ -24,6 +24,8 @@
 
 #include <config.h>
 
+#include <gio/gio.h>
+
 #include <util/log.h>
 #include <util/glib.h>
 #include <util/misc.h>

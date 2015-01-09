@@ -1088,11 +1088,6 @@ bootstrap_coverage(GjsCoverage *coverage)
             return FALSE;
         }
 
-        if (!JS_DefineDebuggerObject(context, debugger_compartment)) {
-            gjs_throw(context, "Failed to init Debugger");
-            return FALSE;
-        }
-
         if (!JS_DefineFunctions(context, debugger_compartment, &coverage_funcs[0]))
             g_error("Failed to init coverage");
 
@@ -1101,6 +1096,12 @@ bootstrap_coverage(GjsCoverage *coverage)
                                       debugger_compartment,
                                       &error))
             g_error("Failed to eval coverage script: %s\n", error->message);
+
+
+        if (!JS_DefineDebuggerObject(context, debugger_compartment)) {
+            gjs_throw(context, "Failed to init Debugger");
+            return FALSE;
+        }
 
         jsval coverage_statistics_prototype_value;
         if (!JS_GetProperty(context, debugger_compartment, "CoverageStatistics", &coverage_statistics_prototype_value) ||

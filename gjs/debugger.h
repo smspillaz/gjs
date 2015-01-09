@@ -1,5 +1,5 @@
 /*
- * Copyright © 2013 Endless Mobile, Inc.
+ * Copyright © 2014 Endless Mobile, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,10 +17,12 @@
  *
  * Authored By: Sam Spilsbury <sam@endlessm.com>
  */
-#ifndef GJS_TESTS_ADD_FUNCS_H
-#define GJS_TESTS_ADD_FUNCS_H
+#ifndef _GJS_DEBUGGER_H
+#define _GJS_DEBUGGER_H
 
-void gjs_test_add_tests_for_coverage ();
-void gjs_test_add_tests_for_debugger ();
+#include <glib.h>
+#include <gjs/gjs.h>
+
+gpointer gjs_get_debugger_compartment(GjsContext *);
 
 #endif

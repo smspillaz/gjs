@@ -401,6 +401,12 @@ JSBool            gjs_eval_with_scope        (JSContext    *context,
                                               gssize        script_len,
                                               const char   *filename,
                                               jsval        *retval_p);
+JSBool            gjs_eval_file_with_scope (JSContext  *context,
+                                            const char *filename,
+                                            JSObject   *object,
+                                            GError     **error);
+                                            
+
 
 JSBool            gjs_eval_file_with_scope (JSContext  *context,
                                             const char *filename,

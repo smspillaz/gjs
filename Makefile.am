@@ -32,6 +32,7 @@ nobase_gjs_module_include_HEADERS =	\
 	gjs/gjs-module.h	\
 	gjs/compat.h		\
 	gjs/coverage.h \
+	gjs/debugger.h		\
 	gjs/byteArray.h		\
 	gjs/importer.h		\
 	gjs/jsapi-util.h	\
@@ -113,6 +114,8 @@ libgjs_la_SOURCES =		\
 	gjs/gi.h		\
 	gjs/gi.cpp		\
 	gjs/coverage.cpp \
+	gjs/debugger.cpp		\
+	gjs/debugger-console.cpp	\
 	gjs/jsapi-private.cpp	\
 	gjs/jsapi-util.cpp	\
 	gjs/jsapi-dynamic-class.cpp \
@@ -215,6 +218,7 @@ bin_PROGRAMS += gjs-console
 
 gjs_console_CPPFLAGS = 		\
 	$(AM_CPPFLAGS)		\
+        $(GJS_CFLAGS)		\
         $(GOBJECT_CFLAGS)
 gjs_console_LDADD =		\
 	$(JS_LIBS)		\

@@ -39,6 +39,7 @@ gjs_tests_SOURCES =		\
 	test/gjs-tests.cpp \
 	test/gjs-tests-add-funcs.h \
 	test/gjs-test-coverage.cpp \
+	test/gjs-test-debugger.cpp \
 	mock-js-resources.c
 
 check-local: gjs-tests

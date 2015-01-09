@@ -29,16 +29,20 @@
 #include <gjs/gjs.h>
 #include <gjs/coverage.h>
 
+#include "gjs-module.h"
+
 static char **include_path = NULL;
 static char **coverage_paths = NULL;
 static char *coverage_output_path = NULL;
 static char *command = NULL;
+static bool debugging = FALSE;
 
 static GOptionEntry entries[] = {
     { "command", 'c', 0, G_OPTION_ARG_STRING, &command, "Program passed in as a string", "COMMAND" },
     { "coverage-path", 'C', 0, G_OPTION_ARG_STRING_ARRAY, &coverage_paths, "Add the filename FILE to the list of files to generate coverage info for", "FILE" },
     { "coverage-output", 0, 0, G_OPTION_ARG_STRING, &coverage_output_path, "Write coverage output to a directory DIR. This option is mandatory when using --coverage-path", "DIR", },
     { "include-path", 'I', 0, G_OPTION_ARG_STRING_ARRAY, &include_path, "Add the directory DIR to the list of directories to search for js files.", "DIR" },
+    { "debugger", 'd', 0, G_OPTION_ARG_NONE, &debugging, "Start in debug mode", "DEBUG" },
     { NULL }
 };
 
@@ -56,6 +60,8 @@ print_help (GOptionContext *context,
   exit (0);
 }
 
+JSObject * gjs_setup_debugger_console(GjsContext *context);
+
 int
 main(int argc, char **argv)
 {
@@ -63,6 +69,7 @@ main(int argc, char **argv)
     GError *error = NULL;
     GjsContext *js_context;
     GjsCoverage *coverage = NULL;
+    JSObject *debugger_object = NULL;
     char *script;
     const char *filename;
     const char *program_name;
@@ -134,6 +141,11 @@ main(int argc, char **argv)
         g_clear_error(&error);
         goto out;
     }
+
+    /* If we're debugging, set up the debugger and ask it to break
+     * the the very first frame. This will cause a console to appear
+     * asking us what we want to do next */
+    debugger_object = debugging ? gjs_setup_debugger_console(js_context) : NULL;
 
     /* evaluate the script */
     if (!gjs_context_eval(js_context, script, len,
