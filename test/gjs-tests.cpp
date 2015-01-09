@@ -59,6 +59,7 @@ _gjs_unit_test_fixture_finish (GjsUnitTestFixture *fixture)
 {
     JS_EndRequest(fixture->context);
     g_object_unref(fixture->gjs_context);
+    gjs_clear_thread_runtime();
 }
 
 static void
@@ -74,6 +75,7 @@ gjstest_test_func_gjs_context_construct_destroy(void)
 
     context = gjs_context_new ();
     g_object_unref (context);
+    gjs_clear_thread_runtime();
 }
 
 static void
@@ -87,6 +89,7 @@ gjstest_test_func_gjs_context_construct_eval(void)
     if (!gjs_context_eval (context, "1+1", -1, "<input>", &estatus, &error))
         g_error ("%s", error->message);
     g_object_unref (context);
+    gjs_clear_thread_runtime();
 }
 
 #define N_ELEMS 15

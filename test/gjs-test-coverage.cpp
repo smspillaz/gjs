@@ -32,6 +32,7 @@
 #include <gio/gio.h>
 #include <gjs/gjs.h>
 #include <gjs/coverage.h>
+#include <gjs/gjs-module.h>
 
 typedef struct _GjsCoverageFixture {
     GjsContext    *context;
@@ -138,6 +139,7 @@ gjs_coverage_fixture_tear_down(gpointer      fixture_data,
 
     g_object_unref(fixture->coverage);
     g_object_unref(fixture->context);
+    gjs_clear_thread_runtime();
 }
 
 typedef struct _GjsCoverageToSingleOutputFileFixture {
@@ -348,6 +350,7 @@ test_covered_file_is_duplicated_into_output_if_resource(gpointer      fixture_da
 
     g_object_unref(fixture->base_fixture.context);
     g_object_unref(fixture->base_fixture.coverage);
+    gjs_clear_thread_runtime();
     const char *search_paths[] = {
         fixture->base_fixture.temporary_js_script_directory_name,
         NULL
@@ -1285,6 +1288,7 @@ gjs_coverage_multiple_source_files_to_single_output_fixture_set_up(gpointer fixt
 
     g_object_unref(fixture->base_fixture.base_fixture.context);
     g_object_unref(fixture->base_fixture.base_fixture.coverage);
+    gjs_clear_thread_runtime();
     const char *search_paths[] = {
         fixture->base_fixture.base_fixture.temporary_js_script_directory_name,
         NULL

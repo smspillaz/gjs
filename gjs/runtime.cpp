@@ -247,3 +247,23 @@ gjs_runtime_for_current_thread(void)
 
     return runtime;
 }
+
+/* XXX: Keeping the runtime around after the context is destroyed should
+ *      be removed in the future. The future plan for mozjs is to merge
+ *      JSContext and JSRuntime.
+ *
+ *      There is a bug in js24 where JIT code residing in the runtime can be
+ *      garbage collected when a context is destroyed.
+ *      (see: https://bugzilla.mozilla.org/show_bug.cgi?id=1120934). This is
+ *      usually not a problem in most cases as an application will usually
+ *      only ever have one GjsContext during its lifetime anyways. However,
+ *      this is a problem for tests, where cycling through GjsContext objects
+ *      is quite common due to the setup/teardown procedure. As such, this
+ *      function should be called when you tear down a context but intend to
+ *      create a new one later. It will cause a new runtime to be created
+ *      and the JIT code for entering Ion to be re-generated. */
+void
+gjs_clear_thread_runtime(void)
+{
+    g_private_replace(&thread_runtime, NULL);
+}

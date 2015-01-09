@@ -24,6 +24,8 @@
 #ifndef __GJS_RUNTIME_H__
 #define __GJS_RUNTIME_H__
 
+void        gjs_clear_thread_runtime (void);
+
 JSRuntime * gjs_runtime_for_current_thread (void);
 
 JSBool      gjs_runtime_is_sweeping        (JSRuntime *runtime);
