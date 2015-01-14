@@ -807,6 +807,8 @@ function CoverageStatistics(files) {
                 _logExceptionAndReset(e, name, line);
                 return undefined;
             }
+
+            return undefined;
         };
 
         return undefined;
