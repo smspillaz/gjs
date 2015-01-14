@@ -137,16 +137,21 @@ gjs_gtype_create_gtype_wrapper (JSContext *context,
     global = gjs_get_import_global(context);
     gjs_gtype_create_proto(context, global, "GIRepositoryGType", NULL);
 
-    object = (JSObject*) g_type_get_qdata(gtype, gjs_get_gtype_wrapper_quark());
-    if (object != NULL)
-        goto out;
+    /* Invalid type, don't bother getting qdata */
+    if (gtype) {
+        object = (JSObject*) g_type_get_qdata(gtype, gjs_get_gtype_wrapper_quark());
+        if (object != NULL)
+            goto out;
+    }
 
     object = JS_NewObject(context, &gjs_gtype_class, NULL, NULL);
     if (object == NULL)
         goto out;
 
     JS_SetPrivate(object, GSIZE_TO_POINTER(gtype));
-    g_type_set_qdata(gtype, gjs_get_gtype_wrapper_quark(), object);
+
+    if (gtype)
+        g_type_set_qdata(gtype, gjs_get_gtype_wrapper_quark(), object);
 
  out:
     JS_EndRequest(context);
