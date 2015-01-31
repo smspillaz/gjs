@@ -32,6 +32,7 @@
 #include <gjs/runtime.h>
 #include <glib-object.h>
 #include <gi/gtype.h>
+#include <gio/gio.h>
 
 G_BEGIN_DECLS
 
@@ -400,6 +401,11 @@ JSBool            gjs_eval_with_scope        (JSContext    *context,
                                               gssize        script_len,
                                               const char   *filename,
                                               jsval        *retval_p);
+
+JSBool            gjs_eval_file_with_scope (JSContext  *context,
+                                            const char *filename,
+                                            JSObject   *compartment_object,
+                                            GError     **error);
 
 typedef enum {
   GJS_STRING_CONSTRUCTOR,

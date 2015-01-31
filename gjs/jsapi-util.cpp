@@ -1358,3 +1358,42 @@ gjs_eval_with_scope(JSContext    *context,
 
     return JS_TRUE;
 }
+
+JSBool
+gjs_eval_file_with_scope(JSContext *context,
+                         const char *filename,
+                         JSObject   *compartment_object,
+                         GError     **error)
+{
+    char  *script = NULL;
+    gsize script_len = 0;
+
+    GFile *file = g_file_new_for_commandline_arg(filename);
+
+    if (!g_file_load_contents(file,
+                              NULL,
+                              &script,
+                              &script_len,
+                              NULL,
+                              error))
+        return JS_FALSE;
+
+    jsval return_value;
+
+    JSAutoCompartment compartment(context, compartment_object);
+
+    if (!gjs_eval_with_scope(context,
+                             compartment_object,
+                             script,
+                             script_len,
+                             filename,
+                             &return_value)) {
+        gjs_log_exception(context);
+        g_set_error(error, GJS_ERROR, GJS_ERROR_FAILED, "Failed to evaluate %s", filename);
+        return JS_FALSE;
+    }
+
+    g_free(script);
+
+    return JS_TRUE;
+}
