@@ -975,10 +975,55 @@ function testFunctionCounterMapReturnedForFunctionKeys() {
     };
 
     let detectedFunctions = Coverage.functionsForAST(ast);
-    let functionKey = Coverage._getFunctionKeyFromReflectedFunction(ast.body[0]);
-    let functionCounters = Coverage._functionsToFunctionCounters(detectedFunctions);
+    let nullReporter = function() {}
+    let functionCounters = Coverage._functionsToFunctionCounters(detectedFunctions, nullReporter);
 
-    JSUnit.assertEquals(0, functionCounters[functionKey].hitCount);
+    JSUnit.assertEquals(0, functionCounters['name']['1']['0'].hitCount);
+}
+
+function testErrorReportedWhenTwoIndistinguishableFunctionsPresent() {
+    let ast = {
+        body: [{
+            type: 'FunctionDeclaration',
+            id: {
+                name: '(anonymous)'
+            },
+            loc: {
+              start: {
+                  line: 1
+              }
+            },
+            params: [],
+            body: {
+                type: 'BlockStatement',
+                body: []
+            }
+        }, {
+            type: 'FunctionDeclaration',
+            id: {
+                name: '(anonymous)'
+            },
+            loc: {
+              start: {
+                  line: 1
+              }
+            },
+            params: [],
+            body: {
+                type: 'BlockStatement',
+                body: []
+            }
+        }]
+    };
+
+    let detectedFunctions = Coverage.functionsForAST(ast);
+    let callCount = 0;
+    let spyReporter = function() {
+        callCount++;
+    }
+    let functionCounters = Coverage._functionsToFunctionCounters(detectedFunctions,spyReporter);
+
+    JSUnit.assertEquals(1, callCount);
 }
 
 function testKnownFunctionsArrayPopulatedForFunctions() {
@@ -995,14 +1040,67 @@ function testKnownFunctionsArrayPopulatedForFunctions() {
 }
 
 function testIncrementFunctionCountersForFunctionOnSameExecutionStartLine() {
-    let functionKey = 'f:1:0';
-    let functionCounters = {};
-
-    functionCounters[functionKey] = { hitCount: 0 };
-
+    let functionCounters = Coverage._functionsToFunctionCounters([
+        { key: 'f:1:0',
+          line: 1,
+          n_params: 0 }
+    ]);
     Coverage._incrementFunctionCounters(functionCounters, null, 'f', 1, 0);
 
-    JSUnit.assertEquals(functionCounters[functionKey].hitCount, 1);
+    JSUnit.assertEquals(functionCounters['f']['1']['0'].hitCount, 1);
+}
+
+function testIncrementFunctionCountersCanDisambiguateTwoFunctionsWithSameName() {
+    let functionCounters = Coverage._functionsToFunctionCounters([
+        { key: '(anonymous):1:0',
+          line: 1,
+          n_params: 0 },
+        { key: '(anonymous):2:0',
+          line: 2,
+          n_params: 0 }
+    ]);
+    Coverage._incrementFunctionCounters(functionCounters, null, '(anonymous)', 1, 0);
+    Coverage._incrementFunctionCounters(functionCounters, null, '(anonymous)', 2, 0);
+
+    JSUnit.assertEquals(functionCounters['(anonymous)']['1']['0'].hitCount, 1);
+    JSUnit.assertEquals(functionCounters['(anonymous)']['2']['0'].hitCount, 1);
+}
+
+function testIncrementFunctionCountersCanDisambiguateTwoFunctionsOnSameLineWithDifferentParams() {
+    let nullReporter = function() {}
+    let functionCounters = Coverage._functionsToFunctionCounters([
+        { key: '(anonymous):1:0',
+          line: 1,
+          n_params: 0 },
+        { key: '(anonymous):1:1',
+          line: 1,
+          n_params: 1 }
+    ], nullReporter);
+    Coverage._incrementFunctionCounters(functionCounters, null, '(anonymous)', 1, 0);
+    Coverage._incrementFunctionCounters(functionCounters, null, '(anonymous)', 1, 1);
+
+    JSUnit.assertEquals(functionCounters['(anonymous)']['1']['0'].hitCount, 1);
+    JSUnit.assertEquals(functionCounters['(anonymous)']['1']['1'].hitCount, 1);
+}
+
+function testIncrementFunctionCountersCanDisambiguateTwoFunctionsOnSameLineByGuessingClosestParams() {
+    let nullReporter = function() {}
+    let functionCounters = Coverage._functionsToFunctionCounters([
+        { key: '(anonymous):1:0',
+          line: 1,
+          n_params: 0 },
+        { key: '(anonymous):1:3',
+          line: 1,
+          n_params: 3 }
+    ], nullReporter);
+
+    /* Eg, we called the function with 3 params with just two arguments. We
+     * should be able to work out that we probably intended to call the
+     * latter function as opposed to the former. */
+    Coverage._incrementFunctionCounters(functionCounters, null, '(anonymous)', 1, 2);
+
+    JSUnit.assertEquals(functionCounters['(anonymous)']['1']['0'].hitCount, 0);
+    JSUnit.assertEquals(functionCounters['(anonymous)']['1']['3'].hitCount, 1);
 }
 
 function testIncrementFunctionCountersForFunctionOnEarlierStartLine() {
@@ -1026,7 +1124,6 @@ function testIncrementFunctionCountersForFunctionOnEarlierStartLine() {
     };
 
     let detectedFunctions = Coverage.functionsForAST(ast);
-    let functionKey = Coverage._getFunctionKeyFromReflectedFunction(ast.body[0]);
     let knownFunctionsArray = Coverage._populateKnownFunctions(detectedFunctions, 3);
     let functionCounters = Coverage._functionsToFunctionCounters(detectedFunctions);
 
@@ -1034,7 +1131,7 @@ function testIncrementFunctionCountersForFunctionOnEarlierStartLine() {
      * at line one */
     Coverage._incrementFunctionCounters(functionCounters, knownFunctionsArray, 'name', 2, 0);
 
-    JSUnit.assertEquals(functionCounters[functionKey].hitCount, 1);
+    JSUnit.assertEquals(functionCounters['name']['1']['0'].hitCount, 1);
 }
 
 function testIncrementFunctionCountersThrowsErrorOnUnexpectedFunction() {
@@ -1144,10 +1241,22 @@ function testBranchTrackerFindsNextBranch() {
 }
 
 function testConvertFunctionCountersToArray() {
-    let functionsMap = {};
-
-    functionsMap['(anonymous):2:0'] = { hitCount: 1 };
-    functionsMap['name:1:0'] = { hitCount: 0 };
+    let functionsMap = {
+        '(anonymous)': {
+            '2': {
+                '0': {
+                    hitCount: 1
+                },
+            },
+        },
+        'name': {
+            '1': {
+                '0': {
+                    hitCount: 0
+                },
+            },
+        }
+    };
 
     let expectedFunctionCountersArray = [
         { name: '(anonymous):2:0', hitCount: 1 },
@@ -1165,10 +1274,22 @@ function testConvertFunctionCountersToArray() {
 }
 
 function testConvertFunctionCountersToArrayIsSorted() {
-    let functionsMap = {};
-
-    functionsMap['name:1:0'] = { hitCount: 0 };
-    functionsMap['(anonymous):2:0'] = { hitCount: 1 };
+    let functionsMap = {
+        '(anonymous)': {
+            '2': {
+                '0': {
+                    hitCount: 1
+                },
+            },
+        },
+        'name': {
+            '1': {
+                '0': {
+                    hitCount: 0
+                },
+            },
+        }
+    };
 
     let expectedFunctionCountersArray = [
         { name: '(anonymous):2:0', hitCount: 1 },
